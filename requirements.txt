@@ -1,0 +1,13 @@
+tweepy
+pandas
+nltk
+pytz
+tzwhere
+countryinfo
+translate
+transformers
+flask
+flask_sqlalchemy
+sqlalchemy
+apscheduler
+--upgrade git+https://github.com/twintproject/twint.git@origin/master#egg=twint
