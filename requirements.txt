@@ -10,4 +10,3 @@ flask
 flask_sqlalchemy
 sqlalchemy
 apscheduler
---user --upgrade git+https://github.com/twintproject/twint.git@origin/master#egg=twint
