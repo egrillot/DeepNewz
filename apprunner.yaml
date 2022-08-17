@@ -4,6 +4,6 @@ build:
   commands:
     build:
       - pip install -r requirements.txt
-      - pip install -e --user --upgrade git+https://github.com/twintproject/twint.git@origin/master#egg=twint
+      - pip install -e git+https://github.com/twintproject/twint.git@origin/master#egg=twint
 run: 
   command: python run.py
