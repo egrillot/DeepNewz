@@ -10,3 +10,4 @@ flask_sqlalchemy
 sqlalchemy
 apscheduler
 torch
+sacremoses
