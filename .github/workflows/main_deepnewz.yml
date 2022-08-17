@@ -28,7 +28,9 @@ jobs:
           source venv/bin/activate
       
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: 
+          pip install -r requirements.txt
+          pip install -e git+https://github.com/twintproject/twint.git@origin/master#egg=twint
         
       # Optional: Add step to run tests here (PyTest, Django test suites, etc.)
       
