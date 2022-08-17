@@ -2,7 +2,6 @@ import tweepy
 import pandas as pd
 import string
 import re
-import nltk
 import datetime
 import pytz
 import logging as lg
@@ -10,9 +9,6 @@ import twint
 
 from time import time
 from tzwhere import tzwhere
-from nltk.stem import WordNetLemmatizer, SnowballStemmer
-from nltk.tokenize import word_tokenize
-from nltk.corpus import stopwords
 from typing import List, Tuple, Dict
 from countryinfo import CountryInfo
 from transformers import pipeline, MarianTokenizer, AutoModelForSeq2SeqLM, AutoTokenizer
@@ -47,14 +43,6 @@ def init_db():
     db.drop_all()
     db.create_all()
     lg.warning('Database initialized')
-
-nltk.download('stopwords')
-nltk.download('wordnet')
-nltk.download('omw-1.4')
-
-stopwords = stopwords.words('english')
-porter_stemmer = SnowballStemmer(language='english')
-wordnet_lemmatizer = WordNetLemmatizer()
 
 ACCESS_TOKEN = '1554762533256527872-KYTjj68TGD7AATT81o3qQRN6wF2nt0'
 ACCESS_SECRET = 'hekIoP51HHqdVH5D4wMZupQVJpWZZjXzx2saFd0s5pzAM'
@@ -151,15 +139,16 @@ class Info:
         self.language = language if language in languages else 'en'
         self.capital = capital
 
+stopwords = ['i', 'me', 'my', 'myself', 'we', 'our', 'ours', 'ourselves', 'you', "you're", "you've", "you'll", "you'd", 'your', 'yours', 'yourself', 'yourselves', 'he', 'him', 'his', 'himself', 'she', "she's", 'her', 'hers', 'herself', 'it', "it's", 'its', 'itself', 'they', 'them', 'their', 'theirs', 'themselves', 'what', 'which', 'who', 'whom', 'this', 'that', "that'll", 'these', 'those', 'am', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'having', 'do', 'does', 'did', 'doing', 'a', 'an', 'the', 'and', 'but', 'if', 'or', 'because', 'as', 'until', 'while', 'of', 'at', 'by', 'for', 'with', 'about', 'against', 'between', 'into', 'through', 'during', 'before', 'after', 'above', 'below', 'to', 'from', 'up', 'down', 'in', 'out', 'on', 'off', 'over', 'under', 'again', 'further', 'then', 'once', 'here', 'there', 'when', 'where', 'why', 'how', 'all', 'any', 'both', 'each', 'few', 'more', 'most', 'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'so', 'than', 'too', 'very', 's', 't', 'can', 'will', 'just', 'don', "don't", 'should', "should've", 'now', 'd', 'll', 'm', 'o', 're', 've', 'y', 'ain', 'aren', "aren't", 'couldn', "couldn't", 'didn', "didn't", 'doesn', "doesn't", 'hadn', "hadn't", 'hasn', "hasn't", 'haven', "haven't", 'isn', "isn't", 'ma', 'mightn', "mightn't", 'mustn', "mustn't", 'needn', "needn't", 'shan', "shan't", 'shouldn', "shouldn't", 'wasn', "wasn't", 'weren', "weren't", 'won', "won't", 'wouldn', "wouldn't"]
+
 def text_preprocessing(text: str):
 
     text_punctuation = "".join([i for i in text if i not in string.punctuation]) # remove punctuation
     text_lower = text_punctuation.lower() # lower
-    text_tokenized = word_tokenize(text_lower) # tokenization
+    text_tokenized = text_lower.split(" ") # tokenization
     text_stopwords = [i for i in text_tokenized if i not in stopwords] # stop words
-    text_lemmatizer = [wordnet_lemmatizer.lemmatize(word) for word in text_stopwords] # lemmatizer
 
-    return text_lemmatizer
+    return text_stopwords
 
 def full_text_tweet(tweet):
 
@@ -293,7 +282,7 @@ def harvest(db):
     print(time()-start_time)
 
 scheduler = BackgroundScheduler()
-job = scheduler.add_job(func=harvest, trigger='interval', args=(db,), minutes=30)
+job = scheduler.add_job(func=harvest, trigger='interval', args=(db,), minutes=30, start_date='2022-08-17 07:46:00')
 scheduler.start()
 
 def title(hashtag: str):
