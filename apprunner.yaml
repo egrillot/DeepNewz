@@ -1,8 +1,7 @@
 version: 1.0
 runtime: python3 
-build:
+install:
   commands:
-    build:
       - pip install -r requirements.txt
       - pip install -e git+https://github.com/twintproject/twint.git@origin/master#egg=twint
 run: 
