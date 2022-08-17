@@ -456,7 +456,7 @@ body{
     box-shadow: 0px 10px 10px -10px var(--grayishBlue);
     padding: 30px;
     margin: 40px;  
-    width: 710px;
+    width: 650px;
 }
 
 @media (max-width: 450px) {

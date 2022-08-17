@@ -6,16 +6,16 @@ import nltk
 import datetime
 import pytz
 import logging as lg
+import twint
 
-from time import time, sleep
+from time import time
 from tzwhere import tzwhere
 from nltk.stem import WordNetLemmatizer, SnowballStemmer
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
 from typing import List, Tuple, Dict
 from countryinfo import CountryInfo
-from translate import Translator
-from transformers import pipeline
+from transformers import pipeline, MarianTokenizer, AutoModelForSeq2SeqLM, AutoTokenizer
 from flask import Flask, render_template, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import and_
@@ -60,15 +60,48 @@ ACCESS_TOKEN = '1554762533256527872-KYTjj68TGD7AATT81o3qQRN6wF2nt0'
 ACCESS_SECRET = 'hekIoP51HHqdVH5D4wMZupQVJpWZZjXzx2saFd0s5pzAM'
 CONSUMER_KEY = 'zataAuwEkWQEQBH9khGE4CWhQ'
 CONSUMER_SECRET = 'xFzUMtNh169fhKjPFfr0vDULQoLsXEkcGoivwZf5HFwEHXQOma'
-count_request = 1
 
 auth = tweepy.OAuthHandler(CONSUMER_KEY, CONSUMER_SECRET)
 auth.set_access_token(ACCESS_TOKEN, ACCESS_SECRET)
 api = tweepy.API(auth)
 
-languages = ['af', 'sq', 'am', 'ar', 'hy', 'az', 'eu', 'be', 'bn', 'bs', 'bg', 'ca', 'ceb', 'ny', 'zh-cn', 'zh-tw', 'co', 'hr', 'cs', 'da', 'nl', 'en', 'eo', 'et', 'tl', 'fi', 'fr', 'fy', 'gl', 'ka', 'de', 'el', 'gu', 'ht', 'ha', 'haw', 'iw', 'he', 'hi', 'hmn', 'hu', 'is', 'ig', 'id', 'ga', 'it', 'ja', 'jw', 'kn', 'kk', 'km', 'ko', 'ku', 'ky', 'lo', 'la', 'lv', 'lt', 'lb', 'mk', 'mg', 'ms', 'ml', 'mt', 'mi', 'mr', 'mn', 'my', 'ne', 'no', 'or', 'ps', 'fa', 'pl', 'pt', 'pa', 'ro', 'ru', 'sm', 'gd', 'sr', 'st', 'sn', 'sd', 'si', 'sk', 'sl', 'so', 'es', 'su', 'sw', 'sv', 'tg', 'ta', 'tt', 'te', 'th', 'tr', 'tk', 'uk', 'ur', 'ug', 'uz', 'vi', 'cy', 'xh', 'yi', 'yo', 'zu']
+languages = ['en', 'fr', 'ja']
 countries = ['France', 'Japan', 'UK', 'USA']
 data = {'b': 'France', 'a': 'France', 'pos': '1', 'neu': '1', 'neg': '0', 'cache': [], 'feed_message': "Votre fil d'actualité", "init": True}
+mname_fr_en = 'Helsinki-NLP/opus-mt-fr-en'
+mname_ja_en = 'Helsinki-NLP/opus-mt-ja-en'
+
+tokenizer_fr_en = MarianTokenizer.from_pretrained(mname_fr_en)
+model_fr_en = AutoModelForSeq2SeqLM.from_pretrained(mname_fr_en)
+
+tokenizer_ja_en = MarianTokenizer.from_pretrained(mname_ja_en)
+model_ja_en = AutoModelForSeq2SeqLM.from_pretrained(mname_ja_en)
+
+def translate(text, lang):
+
+    if lang == 'fr':
+
+        tokenizer = tokenizer_fr_en
+        model = model_fr_en
+    
+    elif lang == 'ja':
+
+        tokenizer = tokenizer_ja_en
+        model = model_ja_en
+    
+    elif lang == 'en':
+
+        return text
+    
+    else:
+
+        return
+
+    input_ids = tokenizer.encode(text, return_tensors="pt")
+    outputs = model.generate(input_ids)
+    decoded = tokenizer.decode(outputs[0], skip_special_tokens=True)
+
+    return decoded
 
 emoji_pattern = re.compile("["
         u"\U0001F600-\U0001F64F"  # emoticons
@@ -91,15 +124,17 @@ emoji_pattern = re.compile("["
         u"\u3030"
                       "]+", re.UNICODE)
 
-summary_model = pipeline("summarization", model="facebook/bart-large-cnn")
+sum_tokenizer = AutoTokenizer.from_pretrained("facebook/bart-large-cnn")
+sum_model = AutoModelForSeq2SeqLM.from_pretrained("facebook/bart-large-cnn")
+
+def summarize(text):
+
+    inputs = sum_tokenizer([text], max_length=1024, return_tensors='pt', truncation=True)
+    # Generate Summary
+    summary_ids = sum_model.generate(inputs['input_ids'], max_length=100)
+    return [sum_tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in summary_ids][0]
 
 sentiment_model = pipeline(model="finiteautomata/bertweet-base-sentiment-analysis")
-
-translator_en = Translator(to_lang='en', from_lang='autodetect')
-translator_fr = Translator(to_lang='fr', from_lang='autodetect')
-translator_jp = Translator(to_lang='jp', from_lang='autodetect')
-translator_de = Translator(to_lang='de', from_lang='autodetect')
-translator_sp = Translator(to_lang='sp', from_lang='autodetect')
 
 tzwhere_ = tzwhere.tzwhere()
 
@@ -167,58 +202,48 @@ def select_cache(cache: List[Tuple[str, str, str]], data: Dict[str, str]) -> Lis
         
     return new_cache
 
-def reset_for_request(count_request, start_time):
+def get_trend(trend):
 
-    if count_request == 30:
-        
-        t = start_time - time()
-        count_request = 1
+    return trend if trend[0] == "#" else "#" + trend 
 
-        if t < 61:
-            sleep(61 - t)
+def get_tweets(trend): #80s
 
-        start_time = time()
+    #configuration
+    config = twint.Config()
+    config.Search = get_trend(trend)
+    config.Limit = 3200
+    config.Since = (datetime.date.today() - datetime.timedelta(days=1)).strftime('%Y-%m-%d %H:%M:%S')
+    config.Store_object = True
+    config.Hide_output = True
+    #running search
+    twint.run.Search(config)
 
-    else:
+    tweets_as_objects = twint.output.tweets_list
 
-        count_request += 1
+    return [(t.tweet, t.lang) for t in tweets_as_objects][-25:] 
 
 def harvest(db):
 
     print('Harvesting...')
 
-    sleep(61)
-
-    t=time()
+    start_time=time()
 
     for country in countries:
 
         info = Info(country)
         available_loc = api.closest_trends(info.lat, info.lon)
-        reset_for_request(count_request, start_time)
         trends = api.get_place_trends(available_loc[0]['woeid'])
-        reset_for_request(count_request, start_time)
-        hashtag_kept = []
-        doc_kept = []
-        doc_preprocessed_kept = []
 
         for trend in trends[0]['trends']:  
 
             hashtag = trend['name']
-
-            text = [full_text_tweet(t) for t in api.search_30_day(
-                        label='prod',
-                        query=hashtag,
-                        fromDate=(datetime.date.today() - datetime.timedelta(days=1)).strftime('%Y%m%d%H%M')
-                    )]
-            reset_for_request(count_request, start_time)
-
+            text_lang = get_tweets(hashtag)
             doc = ''  
-            for t in text[-25:]:
+            for t in text_lang:
 
-                tx = emoji_pattern.sub(r'', t)
-                tx_translated = translator_en.translate(tx)
-                doc += tx_translated
+                tx = emoji_pattern.sub(r'', t[0])
+                tx_translated = translate(tx, t[1])
+                doc += tx_translated if tx_translated is not None else ''
             
             raw_preprocessing = text_preprocessing(doc)
             q = db.session.query(Content.id).filter(Content.hashtag==hashtag)
@@ -232,44 +257,43 @@ def harvest(db):
 
                 if len(summary_preprocessed.intersection(tweet_preprocessed_set)) < 10:
 
-                    hashtag_kept.append(hashtag)
-                    doc_kept.append(doc)
-                    doc_preprocessed_kept.append(" ".join(raw_preprocessing))
+                    summary = summarize(doc)
+                    sentiment = sentiment_model(summary)[0]['label']
+
+                    timezone_str = tzwhere_.tzNameAt(info.lat, info.lon)
+                    capital = info.capital
+
+                    if timezone_str is None:
+                        timezone_str = 'UTC'
+                        capital = 'London'
+
+                    tz = pytz.timezone(timezone_str)
+
+                    date = f" {datetime.datetime.now(tz).strftime('%H:%M:%S, %Y/%m/%d')} in ({capital})"
+                    db.session.add(Content(hashtag, summary, " ".join(raw_preprocessing), date, sentiment, country))
             
             else:
 
-                hashtag_kept.append(hashtag)
-                doc_kept.append(doc)
-                doc_preprocessed_kept.append(" ".join(raw_preprocessing))
-        
-        df_filter = pd.DataFrame(zip(hashtag_kept, doc_kept, doc_preprocessed_kept), columns=['hashtag', 'text', 'text preprocessed'])
+                summary = summarize(doc)
+                sentiment = sentiment_model(summary)[0]['label']
+                timezone_str = tzwhere_.tzNameAt(info.lat, info.lon)
+                capital = info.capital
 
-        df_filter['summary'] = df_filter['text'].map(lambda x: summary_model(x, max_length=100)[0]['summary_text'])
-        df_filter['sentiment'] = df_filter['summary'].map(lambda x: sentiment_model(x)[0]['label'])
+                if timezone_str is None:
+                    timezone_str = 'UTC'
+                    capital = 'London'
 
-        timezone_str = tzwhere_.tzNameAt(info.lat, info.lon)
-        capital = info.capital
+                tz = pytz.timezone(timezone_str)
 
-        if timezone_str is None:
-            timezone_str = 'UTC'
-            capital = 'London'
+                date = f" {datetime.datetime.now(tz).strftime('%H:%M:%S, %Y/%m/%d')} in ({capital})"
+                db.session.add(Content(hashtag, summary, " ".join(raw_preprocessing), date, sentiment, country))  
 
-        tz = pytz.timezone(timezone_str)
-
-        date = f" {datetime.datetime.now(tz).strftime('%H:%M:%S, %Y/%m/%d')} in ({capital})"
-
-        for hashtag, summary, text_preprocessed, sentiment in zip(df_filter['hashtag'], df_filter['summary'], df_filter['text preprocessed'], df_filter['sentiment']):
-
-            print(hashtag, summary, text_preprocessed, sentiment)
-            db.session.add(Content(hashtag, summary, text_preprocessed, date, sentiment, country))
-        
-        db.session.commit()
+    db.session.commit()
     print('Harvesting done.')
-    print(time()-t)
+    print(time()-start_time)
 
 scheduler = BackgroundScheduler()
-job = scheduler.add_job(func=harvest, trigger='interval', args=(db,), minutes=40, start_date=('2022-08-15 19:00:00'))
-start_time = time()
+job = scheduler.add_job(func=harvest, trigger='interval', args=(db,), minutes=30, start_date='2022-08-17 07:46:00')
 scheduler.start()
 
 def title(hashtag: str):
@@ -283,8 +307,10 @@ def title(hashtag: str):
 def update_feed(db, data):
 
     country = data['a']
+    info = Info(country)
     contents: List[Content] = []
-
+    d = datetime.datetime.now(pytz.timezone(tzwhere_.tzNameAt(info.lat, info.lon))).strftime('%Y/%m/%d')
+    
     if data['pos'] == '1':
 
         contents += db.session.query(Content).filter(and_(Content.country.like(country), Content.sentiment.like('POS'))).order_by(Content.id.desc()).all()
@@ -297,11 +323,11 @@ def update_feed(db, data):
 
         contents += db.session.query(Content).filter(and_(Content.country.like(country), Content.sentiment.like('NEG'))).order_by(Content.id.desc()).all()
 
-    contents = [(c.id, c.summary, c.sentiment, c.date, c.hashtag) for c in contents]
+    contents = [(c.id, c.summary, c.sentiment, c.date, c.hashtag) for c in contents if d in c.date]
     contents = sorted(contents, key=lambda x: (-x[0], x[1], x[2], x[3], x[4]))
     contents: List[str] = [(i+1, c[1], c[2], c[3], title(c[4])) for i, c in enumerate(contents)]
 
-    return contents if len(contents) < 100 else contents[:100]
+    return contents
 
 @app.route('/')
 @app.route('/index')
@@ -343,15 +369,11 @@ def change_params():
 
     info = Info(data['a'])
     if info.language == 'en':
-        data['feed_message'] = translator_en.translate("Your news feed")
+        data['feed_message'] = "Your news feed"
     if info.language == 'fr':
-        data['feed_message'] = translator_fr.translate("Your news feed")
-    if info.language == 'de':
-        data['feed_message'] = translator_de.translate("Your news feed")
-    if info.language == 'sp':
-        data['feed_message'] = translator_sp.translate("Your news feed")
+        data['feed_message'] = "Votre fil d'actualité"
     if info.language == 'jp':
-        data['feed_message'] = translator_jp.translate("Your news feed")
+        data['feed_message'] = "あなたのニュースフィード"
 
     data['cache'] = update_feed(db, data)
     

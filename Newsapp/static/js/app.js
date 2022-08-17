@@ -10,18 +10,13 @@ function display_feed(data){
         var summary = data['cache'][i][1]
         var sentiment = data['cache'][i][2]
         var date = data['cache'][i][3]
+        var title = data['cache'][i][4]
 
-        to_display += '<div class="box" style="animation: 0.4s ease-out 0s pop;">'
-                        +'<div class="subbox">'
-                            +'<div class="sentiment" id="s-'+ sentiment +'">'
-                                +'<span class="creation-date">'
-                                    +'<div class="creation">Created at</div>'
-                                    +'<div class="date">'+ date +'</div>'
-                                +'</span>'
-                                +'<span class="summary">'+ summary +'</span>'
-                            +'</div>'
-                        +'</div>'
-                    +'</div>'                
+        to_display +=  '<div class="box s-'+ sentiment +'" style="animation: 0.4s ease-out 0s pop;">'
+                            +'<h2>'+ title +'</h2>'
+                            +'<p>'+ summary +'}</p>'
+                        +'<div class="date">Created at '+ date +'</div>'
+                    +'</div>'          
     }
     to_display += +'</div>';
     $(".feed").html(to_display);
@@ -77,36 +72,6 @@ $('.negative').click(function(e){
       } );
 })
 
-$('#Australia').click(function(e){
-    e.preventDefault();
-    $.get( "/change_params", {country: 'Australia'}, function( data ){
-        console.log(JSON.stringify(data));
-        $('.radio-Australia').prop("checked", true);
-        $('.radio-' + data['b']).prop("checked", false);
-        display_feed(data);
-    })
-})
-
-$('#Brazil').click(function(e){
-    e.preventDefault();
-    $.get( "/change_params", {country: 'Brazil'}, function( data ){
-        console.log(JSON.stringify(data));
-        $('.radio-Brazil').prop("checked", true);
-        $('.radio-' + data['b']).prop("checked", false);
-        display_feed(data);
-    })
-})
-
-$('#China').click(function(e){
-    e.preventDefault();
-    $.get( "/change_params", {country: 'China'}, function( data ){
-        console.log(JSON.stringify(data));
-        $('.radio-China').prop("checked", true);
-        $('.radio-' + data['b']).prop("checked", false);
-        display_feed(data);
-    })
-})
-
 $('#France').click(function(e){
     e.preventDefault();
     $.get( "/change_params", {country: 'France'}, function( data ){
@@ -117,51 +82,11 @@ $('#France').click(function(e){
     })
 })
 
-$('#Germany').click(function(e){
-    e.preventDefault();
-    $.get( "/change_params", {country: 'Germany'}, function( data ){
-        console.log(JSON.stringify(data));
-        $('.radio-Germany').prop("checked", true);
-        $('.radio-' + data['b']).prop("checked", false);
-        display_feed(data);
-    })
-})
-
-$('#Italy').click(function(e){
-    e.preventDefault();
-    $.get( "/change_params", {country: 'italy'}, function( data ){
-        console.log(JSON.stringify(data));
-        $('.radio-italy').prop("checked", true);
-        $('.radio-' + data['b']).prop("checked", false);
-        display_feed(data);
-    })
-})
-
 $('#Japan').click(function(e){
     e.preventDefault();
     $.get( "/change_params", {country: 'japan'}, function( data ){
         console.log(JSON.stringify(data));
         $('.radio-japan').prop("checked", true);
-        $('.radio-' + data['b']).prop("checked", false);
-        display_feed(data);
-    })
-})
-
-$('#Russia').click(function(e){
-    e.preventDefault();
-    $.get( "/change_params", {country: 'Russia'}, function( data ){
-        console.log(JSON.stringify(data));
-        $('.radio-Russia').prop("checked", true);
-        $('.radio-' + data['b']).prop("checked", false);
-        display_feed(data);
-    })
-})
-
-$('#Spain').click(function(e){
-    e.preventDefault();
-    $.get( "/change_params", {country: 'Spain'}, function( data ){
-        console.log(JSON.stringify(data));
-        $('.radio-Spain').prop("checked", true);
         $('.radio-' + data['b']).prop("checked", false);
         display_feed(data);
     })
