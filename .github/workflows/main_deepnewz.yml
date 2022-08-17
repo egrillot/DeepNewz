@@ -63,3 +63,4 @@ jobs:
           app-name: 'deepnewz'
           slot-name: 'Production'
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_F383C906946549C2A0DA32C2793B74F3 }}
+          run: flask run
