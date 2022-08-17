@@ -9,6 +9,6 @@ flask
 flask_sqlalchemy
 sqlalchemy
 apscheduler
-torch
 sacremoses
-python-git
+torch
+sentencepiece
