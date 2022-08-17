@@ -293,7 +293,7 @@ def harvest(db):
     print(time()-start_time)
 
 scheduler = BackgroundScheduler()
-job = scheduler.add_job(func=harvest, trigger='interval', args=(db,), minutes=30, start_date='2022-08-17 07:46:00')
+job = scheduler.add_job(func=harvest, trigger='interval', args=(db,), minutes=30)
 scheduler.start()
 
 def title(hashtag: str):
