@@ -28,9 +28,7 @@ jobs:
           source venv/bin/activate
       
       - name: Install dependencies
-        run: 
-          pip install -r requirements.txt
-          pip install -e git+https://github.com/twintproject/twint.git@origin/master#egg=twint
+        run: pip install -r requirements.txt
         
       # Optional: Add step to run tests here (PyTest, Django test suites, etc.)
       
@@ -62,5 +60,4 @@ jobs:
         with:
           app-name: 'deepnewz'
           slot-name: 'Production'
-          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_F383C906946549C2A0DA32C2793B74F3 }}
-          run: flask run
+          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_DE1751CC88CD4DDA8CDC5008A13F630F }}
