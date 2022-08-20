@@ -39,7 +39,8 @@ class Content(db.Model):
         self.country = country
         self.url = url
 
-def init_db():
+def init_db(app):
+    db.init_app(app)
     db.drop_all()
     db.create_all()
     lg.warning('Database initialized')
@@ -382,7 +383,7 @@ def harvest(db):
     print(time()-start_time)
 
 scheduler = BackgroundScheduler()
-job = scheduler.add_job(func=harvest, trigger='interval', args=(db,), minutes=30, start_date='2022-08-19 18:17:00')
+job = scheduler.add_job(func=harvest, trigger='interval', args=(db,), minutes=15, misfire_grace_time=1)
 scheduler.start()
 
 def title(hashtag: str):
