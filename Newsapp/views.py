@@ -15,8 +15,7 @@ from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import and_
 from apscheduler.schedulers.background import BackgroundScheduler
 
-from . import app
-
+app = Flask(__name__)
 app.config.from_object('config')
 
 db = SQLAlchemy(app)
