@@ -312,49 +312,6 @@ body{
 	background-color: #000000;	
 }
 
-
- #s-POS:hover .creation-date{
-  background-color: #2ddab1;
-  border:3px solid #012340;
-  color: #012340;
-  transition: 0.7s;
- }
-
- #s-NEU:hover .creation-date{
-  background-color: #8CC9E6;
-  border:3px solid #072326;
-  color: #072326;
-  transition: 0.7s;
-}
-
-#s-NEG:hover .creation-date{
-  background-color: #92373d;
-  border:3px solid #0f133d;
-  color: #0f133d;
-  transition: 0.7s;
-}
-
-#s-POS:hover .summary{
-  background-color: #2ddab1;
-  border:3px solid #012340;
-  color: #012340;
-  transition: 0.7s;
-}
-
-#s-NEU:hover .summary{
- background-color: #8CC9E6;
- border:3px solid #072326;
- color: #072326;
- transition: 0.7s;
-}
-
-#s-NEG:hover .summary{
- background-color: #92373d;
- border:3px solid #0f133d;
- color: #0f133d;
- transition: 0.7s;
-}
-
 .loader {
   position: absolute;
   top: calc(50% - 32px);
@@ -371,6 +328,24 @@ body{
   width: 100%;
   height: 100%;
   border-radius: 50%;  
+}
+
+.s-POS:hover{
+  background-color: #68D3BA;
+  cursor: pointer;
+  transition: 0.7s;
+}
+
+.s-NEU:hover{
+  background-color: #034C8C;
+  cursor: pointer;
+  transition: 0.7s;
+}
+
+.s-NEG:hover{
+  background-color: #96272F;
+  cursor: pointer;
+  transition: 0.7s;
 }
 
 .inner.one {
@@ -456,7 +431,7 @@ body{
     box-shadow: 0px 10px 10px -10px var(--grayishBlue);
     padding: 30px;
     margin: 40px;  
-    width: 650px;
+    width: 630px;
 }
 
 @media (max-width: 450px) {

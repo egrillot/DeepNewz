@@ -11,8 +11,10 @@ function display_feed(data){
         var sentiment = data['cache'][i][2]
         var date = data['cache'][i][3]
         var title = data['cache'][i][4]
+        var url = data['cache'][i][5]
 
-        to_display +=  '<div class="box s-'+ sentiment +'" style="animation: 0.4s ease-out 0s pop;">'
+        to_display +=  '<input type="button" class="news" style="display: none;"/>'
+                        +'<div class="box s-'+ sentiment +'" style="animation: 0.4s ease-out 0s pop;" onclick="load_src(\'' + url + '\')">'
                             +'<h2>'+ title +'</h2>'
                             +'<p>'+ summary +'}</p>'
                         +'<div class="date">Created at '+ date +'</div>'
@@ -26,8 +28,13 @@ function display_loading(){
     $(".feed").html('<div class="loader"><div class="inner one"></div><div class="inner two"></div><div class="inner three"></div></div>')
 }
 
+function load_src(url){
+    window.open(url, '_blank');
+}
+
 $('.positive').click(function(e){
     e.preventDefault();
+    display_loading();
     $.get( "/change_params", {sentiment: 'positive'}, function( data ) {
         console.log(JSON.stringify(data));
         if (data['pos'] == "1"){
@@ -48,6 +55,7 @@ function refresh(){
 
 $('.neutral').click(function(e){
     e.preventDefault();
+    display_loading();
     $.get( "/change_params", {sentiment: 'neutral'}, function( data ) {
         console.log(JSON.stringify(data));
         if (data['neu'] == "1"){
@@ -61,6 +69,7 @@ $('.neutral').click(function(e){
 
 $('.negative').click(function(e){
     e.preventDefault();
+    display_loading();
     $.get( "/change_params", {sentiment: 'negative'}, function( data ) {
         console.log(JSON.stringify(data));
         if (data['neg'] == "1"){
@@ -74,6 +83,7 @@ $('.negative').click(function(e){
 
 $('#France').click(function(e){
     e.preventDefault();
+    display_loading();
     $.get( "/change_params", {country: 'France'}, function( data ){
         console.log(JSON.stringify(data));
         $('.radio-France').prop("checked", true);
@@ -84,7 +94,8 @@ $('#France').click(function(e){
 
 $('#Japan').click(function(e){
     e.preventDefault();
-    $.get( "/change_params", {country: 'japan'}, function( data ){
+    display_loading();
+    $.get( "/change_params", {country: 'Japan'}, function( data ){
         console.log(JSON.stringify(data));
         $('.radio-japan').prop("checked", true);
         $('.radio-' + data['b']).prop("checked", false);
@@ -94,6 +105,7 @@ $('#Japan').click(function(e){
 
 $('#UK').click(function(e){
     e.preventDefault();
+    display_loading();
     $.get( "/change_params", {country: 'UK'}, function( data ){
         console.log(JSON.stringify(data));
         $('.radio-UK').prop("checked", true);
@@ -104,6 +116,7 @@ $('#UK').click(function(e){
 
 $('#USA').click(function(e){
     e.preventDefault();
+    display_loading();
     $.get( "/change_params", {country: 'USA'}, function( data ){
         console.log(JSON.stringify(data));
         $('.radio-USA').prop("checked", true);

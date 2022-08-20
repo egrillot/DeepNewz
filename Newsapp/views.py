@@ -1,5 +1,4 @@
 import tweepy
-import pandas as pd
 import string
 import re
 import datetime
@@ -10,14 +9,14 @@ import twint
 from time import time
 from tzwhere import tzwhere
 from typing import List, Tuple, Dict
-from countryinfo import CountryInfo
 from transformers import pipeline, MarianTokenizer, AutoModelForSeq2SeqLM, AutoTokenizer
 from flask import Flask, render_template, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import and_
 from apscheduler.schedulers.background import BackgroundScheduler
 
-app = Flask(__name__)
+from . import app
+
 app.config.from_object('config')
 
 db = SQLAlchemy(app)
@@ -30,14 +29,16 @@ class Content(db.Model):
     date = db.Column(db.String(100))
     sentiment = db.Column(db.String(3))
     country = db.Column(db.String(200))
+    url = db.Column(db.String(4000))
 
-    def __init__(self, hashtag: str, summary: str, summary_preprocessed: str, date: str, sentiment: str, country: str) -> None:
+    def __init__(self, hashtag: str, summary: str, summary_preprocessed: str, date: str, sentiment: str, country: str, url: str) -> None:
         self.hashtag = hashtag
         self.summary = summary
         self.summary_preprocessed = summary_preprocessed
         self.date = date
         self.sentiment = sentiment
         self.country = country
+        self.url = url
 
 def init_db():
     db.drop_all()
@@ -53,8 +54,102 @@ auth = tweepy.OAuthHandler(CONSUMER_KEY, CONSUMER_SECRET)
 auth.set_access_token(ACCESS_TOKEN, ACCESS_SECRET)
 api = tweepy.API(auth)
 
-languages = ['en', 'fr', 'ja']
 countries = ['France', 'Japan', 'UK', 'USA']
+coordinates = {
+    'France': {
+        'Paris': {
+            'lat': 48.856613,
+            'lon': 2.352222
+        },
+        'Marseille': {
+            'lat': 43.296482,
+            'lon': 5.369780
+        },
+        'Lille': {
+            'lat': 50.629250,
+            'lon': 3.057256
+        },
+        'Bordeaux': {
+            'lat': 44.837788,
+            'lon': -0.579180
+        },
+        'Lyon': {
+            'lat': 45.764042,
+            'lon': 4.835659
+        }
+    },
+    'Japan': {
+        'Sapporo': {
+            'lat': 43.066666,
+            'lon': 141.350006
+        },
+        'Tokyo': {
+            'lat': 35.652832,
+            'lon': 139.839478
+        },
+        'Nagoya': {
+            'lat': 35.18147,
+            'lon': 136.90641
+        },
+        'Hiroshima': {
+            'lat': 34.383331,
+            'lon': 132.449997
+        },
+        'Fukuoka ': {
+            'lat': 33.590355,
+            'lon': 130.401716
+        }
+    },
+    'UK': {
+        'London': {
+            'lat': 51.509865,
+            'lon': -0.118092
+        },
+        'Birmingham': {
+            'lat': 52.489471,
+            'lon': -1.898575
+        },
+        'Manchester': {
+            'lat': 53.48095,
+            'lon': -2.23743
+        },
+        'Glasgow': {
+            'lat': 55.860916,
+            'lon': -4.251433
+        },
+        'Belfast': {
+            'lat': 54.597285,
+            'lon': -5.93012
+        }
+    },
+    'USA': {
+        'Washington': {
+            'lat': 47.751076,
+            'lon': -120.740135
+        },
+        'New York': {
+            'lat': 40.730610,
+            'lon': -73.935242
+        },
+        'Chicago': {
+            'lat': 41.881832,
+            'lon': -87.623177
+        },
+        'Los Angeles': {
+            'lat': 34.052235,
+            'lon': -118.243683
+        },
+        'Dallas': {
+            'lat': 32.779167,
+            'lon': -96.808891
+        },
+        'Las Vegas': {
+            'lat': 36.114704,
+            'lon': -115.201462
+        }
+    }
+}
+
 data = {'b': 'France', 'a': 'France', 'pos': '1', 'neu': '1', 'neg': '0', 'cache': [], 'feed_message': "Votre fil d'actualité", "init": True}
 mname_fr_en = 'Helsinki-NLP/opus-mt-fr-en'
 mname_ja_en = 'Helsinki-NLP/opus-mt-ja-en'
@@ -64,6 +159,15 @@ model_fr_en = AutoModelForSeq2SeqLM.from_pretrained(mname_fr_en)
 
 tokenizer_ja_en = MarianTokenizer.from_pretrained(mname_ja_en)
 model_ja_en = AutoModelForSeq2SeqLM.from_pretrained(mname_ja_en)
+
+global current_hashtag
+current_hashtag = {datetime.datetime.today().weekday(): []}
+
+def reset_daily_hashtag(current_hashtag):
+
+    if datetime.datetime.today().weekday() != list(current_hashtag.keys())[0]:
+
+        current_hashtag = {datetime.datetime.today().weekday(): []}
 
 def translate(text, lang):
 
@@ -126,29 +230,13 @@ sentiment_model = pipeline(model="finiteautomata/bertweet-base-sentiment-analysi
 
 tzwhere_ = tzwhere.tzwhere()
 
-class Info:
-
-    def __init__(self, country: str) -> None:
-        country = CountryInfo(country)
-        language = country.languages()[0]
-        capital = country.capital()
-        location = country.capital_latlng()
-
-        self.lat = location[0]
-        self.lon = location[1]
-        self.language = language if language in languages else 'en'
-        self.capital = capital
-
-stopwords = ['i', 'me', 'my', 'myself', 'we', 'our', 'ours', 'ourselves', 'you', "you're", "you've", "you'll", "you'd", 'your', 'yours', 'yourself', 'yourselves', 'he', 'him', 'his', 'himself', 'she', "she's", 'her', 'hers', 'herself', 'it', "it's", 'its', 'itself', 'they', 'them', 'their', 'theirs', 'themselves', 'what', 'which', 'who', 'whom', 'this', 'that', "that'll", 'these', 'those', 'am', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'having', 'do', 'does', 'did', 'doing', 'a', 'an', 'the', 'and', 'but', 'if', 'or', 'because', 'as', 'until', 'while', 'of', 'at', 'by', 'for', 'with', 'about', 'against', 'between', 'into', 'through', 'during', 'before', 'after', 'above', 'below', 'to', 'from', 'up', 'down', 'in', 'out', 'on', 'off', 'over', 'under', 'again', 'further', 'then', 'once', 'here', 'there', 'when', 'where', 'why', 'how', 'all', 'any', 'both', 'each', 'few', 'more', 'most', 'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'so', 'than', 'too', 'very', 's', 't', 'can', 'will', 'just', 'don', "don't", 'should', "should've", 'now', 'd', 'll', 'm', 'o', 're', 've', 'y', 'ain', 'aren', "aren't", 'couldn', "couldn't", 'didn', "didn't", 'doesn', "doesn't", 'hadn', "hadn't", 'hasn', "hasn't", 'haven', "haven't", 'isn', "isn't", 'ma', 'mightn', "mightn't", 'mustn', "mustn't", 'needn', "needn't", 'shan', "shan't", 'shouldn', "shouldn't", 'wasn', "wasn't", 'weren', "weren't", 'won', "won't", 'wouldn', "wouldn't"]
-
 def text_preprocessing(text: str):
 
     text_punctuation = "".join([i for i in text if i not in string.punctuation]) # remove punctuation
     text_lower = text_punctuation.lower() # lower
     text_tokenized = text_lower.split(" ") # tokenization
-    text_stopwords = [i for i in text_tokenized if i not in stopwords] # stop words
 
-    return text_stopwords
+    return text_tokenized
 
 def full_text_tweet(tweet):
 
@@ -201,7 +289,7 @@ def get_tweets(trend): #80s
     config = twint.Config()
     config.Search = get_trend(trend)
     config.Limit = 3200
-    config.Since = (datetime.date.today() - datetime.timedelta(days=1)).strftime('%Y-%m-%d %H:%M:%S')
+    config.Since = (datetime.date.today() - datetime.timedelta(hours=3)).strftime('%Y-%m-%d %H:%M:%S')
     config.Store_object = True
     config.Hide_output = True
     #running search
@@ -217,72 +305,85 @@ def harvest(db):
 
     start_time=time()
 
+    reset_daily_hashtag(current_hashtag)
+
     for country in countries:
 
-        info = Info(country)
-        available_loc = api.closest_trends(info.lat, info.lon)
-        trends = api.get_place_trends(available_loc[0]['woeid'])
-
-        for trend in trends[0]['trends']:  
-
-            hashtag = trend['name']
-            text_lang = get_tweets(hashtag)
-            doc = ''  
-            for t in text_lang:
-
-                tx = emoji_pattern.sub(r'', t[0])
-                tx_translated = translate(tx, t[1])
-                doc += tx_translated if tx_translated is not None else ''
+        for city, coordinate in coordinates[country].items():
             
-            raw_preprocessing = text_preprocessing(doc)
-            q = db.session.query(Content.id).filter(Content.hashtag==hashtag)
+            lat = coordinate['lat']
+            lon = coordinate['lon']
+            available_loc = api.closest_trends(lat, lon)
+            trends = api.get_place_trends(available_loc[0]['woeid'])
+            print(city, trends[0]['trends'])
+            for trend in trends[0]['trends']:  
+                print(trend, current_hashtag)
+                hashtag = trend['name']
+                url = trend['url']
 
-            if db.session.query(q.exists()).scalar():
+                if hashtag not in list(current_hashtag.values()):
 
-                content: Content = db.session.query(Content).filter(Content.hashtag==hashtag).order_by(Content.id.desc()).first()
-                
-                summary_preprocessed = set(content.summary_preprocessed.split(" "))
-                tweet_preprocessed_set = set(raw_preprocessing)
+                    current_hashtag[list(current_hashtag.keys())[0]].append(hashtag)
+                    text_lang = get_tweets(hashtag)
+                    print('yo')
+                    if len(text_lang) != 0:
 
-                if len(summary_preprocessed.intersection(tweet_preprocessed_set)) < 10:
+                        doc = ''  
+                        for t in text_lang:
 
-                    summary = summarize(doc)
-                    sentiment = sentiment_model(summary)[0]['label']
+                            tx = emoji_pattern.sub(r'', t[0])
+                            tx_translated = translate(tx, t[1])
+                            doc += tx_translated if tx_translated is not None else ''
+                        
+                        raw_preprocessing = text_preprocessing(doc)
+                        q = db.session.query(Content.id).filter(Content.hashtag==hashtag)
 
-                    timezone_str = tzwhere_.tzNameAt(info.lat, info.lon)
-                    capital = info.capital
+                        if db.session.query(q.exists()).scalar():
 
-                    if timezone_str is None:
-                        timezone_str = 'UTC'
-                        capital = 'London'
+                            content: Content = db.session.query(Content).filter(Content.hashtag==hashtag).order_by(Content.id.desc()).first()
+                            
+                            summary_preprocessed = set(content.summary_preprocessed.split(" "))
+                            tweet_preprocessed_set = set(raw_preprocessing)
 
-                    tz = pytz.timezone(timezone_str)
+                            if len(summary_preprocessed.intersection(tweet_preprocessed_set)) < 10:
 
-                    date = f" {datetime.datetime.now(tz).strftime('%H:%M:%S, %Y/%m/%d')} in ({capital})"
-                    db.session.add(Content(hashtag, summary, " ".join(raw_preprocessing), date, sentiment, country))
-            
-            else:
+                                summary = summarize(doc)
+                                sentiment = sentiment_model(summary)[0]['label']
 
-                summary = summarize(doc)
-                sentiment = sentiment_model(summary)[0]['label']
-                timezone_str = tzwhere_.tzNameAt(info.lat, info.lon)
-                capital = info.capital
+                                timezone_str = tzwhere_.tzNameAt(lat, lon)
 
-                if timezone_str is None:
-                    timezone_str = 'UTC'
-                    capital = 'London'
+                                if timezone_str is None:
+                                    timezone_str = 'UTC'
+                                    city = 'London'
 
-                tz = pytz.timezone(timezone_str)
+                                tz = pytz.timezone(timezone_str)
 
-                date = f" {datetime.datetime.now(tz).strftime('%H:%M:%S, %Y/%m/%d')} in ({capital})"
-                db.session.add(Content(hashtag, summary, " ".join(raw_preprocessing), date, sentiment, country))  
+                                date = f" {datetime.datetime.now(tz).strftime('%H:%M:%S, %Y/%m/%d')} in ({city})"
+                                db.session.add(Content(hashtag, summary, " ".join(raw_preprocessing), date, sentiment, country, url))
+                                db.session.commit()
+                        
+                        else:
 
-    db.session.commit()
+                            summary = summarize(doc)
+                            sentiment = sentiment_model(summary)[0]['label']
+
+                            timezone_str = tzwhere_.tzNameAt(lat, lon)
+
+                            if timezone_str is None:
+                                timezone_str = 'UTC'
+                                city = 'London'
+
+                            tz = pytz.timezone(timezone_str)
+
+                            date = f" {datetime.datetime.now(tz).strftime('%H:%M:%S, %Y/%m/%d')} in ({city})"
+                            db.session.add(Content(hashtag, summary, " ".join(raw_preprocessing), date, sentiment, country, url))
+                            db.session.commit()
+
     print('Harvesting done.')
     print(time()-start_time)
 
 scheduler = BackgroundScheduler()
-job = scheduler.add_job(func=harvest, trigger='interval', args=(db,), minutes=30, start_date='2022-08-17 07:46:00')
+job = scheduler.add_job(func=harvest, trigger='interval', args=(db,), minutes=30, start_date='2022-08-19 18:17:00')
 scheduler.start()
 
 def title(hashtag: str):
@@ -296,9 +397,10 @@ def title(hashtag: str):
 def update_feed(db, data):
 
     country = data['a']
-    info = Info(country)
+    lat = list(coordinates[country].values())[0]['lat']
+    lon = list(coordinates[country].values())[0]['lon']
     contents: List[Content] = []
-    d = datetime.datetime.now(pytz.timezone(tzwhere_.tzNameAt(info.lat, info.lon))).strftime('%Y/%m/%d')
+    d = datetime.datetime.now(pytz.timezone(tzwhere_.tzNameAt(lat, lon))).strftime('%Y/%m/%d')
     
     if data['pos'] == '1':
 
@@ -312,9 +414,9 @@ def update_feed(db, data):
 
         contents += db.session.query(Content).filter(and_(Content.country.like(country), Content.sentiment.like('NEG'))).order_by(Content.id.desc()).all()
 
-    contents = [(c.id, c.summary, c.sentiment, c.date, c.hashtag) for c in contents if d in c.date]
-    contents = sorted(contents, key=lambda x: (-x[0], x[1], x[2], x[3], x[4]))
-    contents: List[str] = [(i+1, c[1], c[2], c[3], title(c[4])) for i, c in enumerate(contents)]
+    contents = [(c.id, c.summary, c.sentiment, c.date, c.hashtag, c.url) for c in contents if d in c.date]
+    contents = sorted(contents, key=lambda x: (-x[0], x[1], x[2], x[3], x[4], x[5]))
+    contents: List[str] = [(i+1, c[1], c[2], c[3], title(c[4]), c[5]) for i, c in enumerate(contents)]
 
     return contents
 
@@ -323,7 +425,7 @@ def update_feed(db, data):
 def index():
 
     data['init'] = True
-    data['cache'] = update_feed(db, data)
+    data['cache'] = update_feed(db ,data)
 
     return render_template(
         'index.html',
@@ -356,15 +458,14 @@ def change_params():
         data['b'] = data['a']
         data['a'] = request.args.get('country')
 
-    info = Info(data['a'])
-    if info.language == 'en':
+    if data['a'] == 'UK' or data['a'] == 'USA':
         data['feed_message'] = "Your news feed"
-    if info.language == 'fr':
+    if data['a'] == 'France':
         data['feed_message'] = "Votre fil d'actualité"
-    if info.language == 'jp':
+    if data['a'] == 'Japan':
         data['feed_message'] = "あなたのニュースフィード"
 
-    data['cache'] = update_feed(db, data)
+    data['cache'] = update_feed(db ,data)
     
     return jsonify(data), 200
 
@@ -372,7 +473,7 @@ def change_params():
 def load_feed():
 
     data['init'] = False
-    data['cache'] = update_feed(db, data)
+    data['cache'] = update_feed(db ,data)
 
     return jsonify(data), 200
 
