@@ -1,14 +1,11 @@
+flask
 tweepy
-pandas
 pytz
 tzwhere
-countryinfo
-translate
 transformers
-flask
 flask_sqlalchemy
 sqlalchemy
 apscheduler
-sacremoses
 torch
 sentencepiece
+sacremoses
