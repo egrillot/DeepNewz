@@ -1,5 +1,21 @@
-FROM ubuntu:18.04
-COPY . /imageV1/*
-RUN pip install -r requirements.txt
+# Set base image (host OS)
+FROM python:3.8
+
+# By default, listen on port 5000
+EXPOSE 5000/tcp
+
+# Set the working directory in the container
+WORKDIR /News
+
+# Copy the dependencies file to the working directory
+COPY requirements.txt config.py app.db app.py .
+COPY Newsapp Newsapp
+
+# Install any dependencies
+RUN python -m pip install --upgrade pip
+RUN apt install git
 RUN pip install -e git+https://github.com/twintproject/twint.git@origin/master#egg=twint
-CMD python /blob/main/run.py
+RUN pip install -r requirements.txt
+
+# Specify the command to run on container start
+CMD [ "python", "app.py" ]
