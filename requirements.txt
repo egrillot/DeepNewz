@@ -2,10 +2,7 @@ flask
 tweepy
 pytz
 tzwhere
-transformers
 flask_sqlalchemy
 sqlalchemy
 apscheduler
-torch
-sentencepiece
-sacremoses
+waitress

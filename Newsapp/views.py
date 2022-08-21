@@ -1,19 +1,108 @@
+from urllib import response
 import tweepy
-import string
 import re
 import datetime
 import pytz
 import logging as lg
 import twint
+import requests
 
-from time import time
+from time import time, sleep
 from tzwhere import tzwhere
 from typing import List, Tuple, Dict
-from transformers import pipeline, MarianTokenizer, AutoModelForSeq2SeqLM, AutoTokenizer
 from flask import Flask, render_template, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import and_
 from apscheduler.schedulers.background import BackgroundScheduler
+
+API_URL_TR_FR_EN = "https://api-inference.huggingface.co/models/Helsinki-NLP/opus-mt-fr-en"
+API_URL_TR_JA_EN = "https://api-inference.huggingface.co/models/Helsinki-NLP/opus-mt-ja-en"
+API_URL_SUM = "https://api-inference.huggingface.co/models/facebook/bart-large-cnn"
+API_URL_SENT = "https://api-inference.huggingface.co/models/finiteautomata/bertweet-base-sentiment-analysis"
+headers = {"Authorization": "Bearer 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"}
+
+def query_tr_fr_en(payload):
+	response = requests.post(API_URL_TR_FR_EN, headers=headers, json=payload)
+	return response.json()
+
+def query_tr_ja_en(payload):
+	response = requests.post(API_URL_TR_JA_EN, headers=headers, json=payload)
+	return response.json()
+
+def query_sum(payload):
+	response = requests.post(API_URL_SUM, headers=headers, json=payload)
+	return response.json()
+
+def query_sent(payload):
+	response = requests.post(API_URL_SENT, headers=headers, json=payload)
+	return response.json()
+
+def translate(text, lang):
+
+    if lang == 'fr':
+
+        q = query_tr_fr_en({'inputs': text})
+
+        if type(q) != list:
+
+            sleep(q['estimated_time'])
+        
+            q = query_tr_fr_en({'inputs': text})
+        
+        return q[0]['translation_text']
+    
+    elif lang == 'ja':
+
+        q = query_tr_ja_en({'inputs': text})
+
+        if type(q) != list:
+
+            sleep(q['estimated_time'])
+        
+            q = query_tr_fr_en({'inputs': text})
+        
+        return q[0]['translation_text']
+    
+    elif lang == 'en':
+
+        return text
+    
+    else:
+
+        return
+
+def summaryze(text):
+
+    inputs = {'inputs': text}
+
+    q = query_sum(inputs)
+
+    if type(q) != list:
+
+        sleep(q['estimated_time'])
+    
+        q = query_sum(inputs)
+    
+    return q[0]['summary_text']
+
+def analyze_sentiment(text):
+
+    inputs = {'inputs': text}
+
+    q = query_sent(inputs)[0]
+
+    score = 0.0
+
+    for evaluation in q:
+
+        s = evaluation['score']
+
+        if s > score:
+
+            sentiment = evaluation['label']
+            score = s
+    
+    return sentiment
 
 app = Flask(__name__)
 app.config.from_object('config')
@@ -24,16 +113,14 @@ class Content(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     hashtag = db.Column(db.String(200))
     summary = db.Column(db.String(4000))
-    summary_preprocessed = db.Column(db.String(4000))
     date = db.Column(db.String(100))
     sentiment = db.Column(db.String(3))
     country = db.Column(db.String(200))
     url = db.Column(db.String(4000))
 
-    def __init__(self, hashtag: str, summary: str, summary_preprocessed: str, date: str, sentiment: str, country: str, url: str) -> None:
+    def __init__(self, hashtag: str, summary: str, date: str, sentiment: str, country: str, url: str) -> None:
         self.hashtag = hashtag
         self.summary = summary
-        self.summary_preprocessed = summary_preprocessed
         self.date = date
         self.sentiment = sentiment
         self.country = country
@@ -151,14 +238,6 @@ coordinates = {
 }
 
 data = {'b': 'France', 'a': 'France', 'pos': '1', 'neu': '1', 'neg': '0', 'cache': [], 'feed_message': "Votre fil d'actualité", "init": True}
-mname_fr_en = 'Helsinki-NLP/opus-mt-fr-en'
-mname_ja_en = 'Helsinki-NLP/opus-mt-ja-en'
-
-tokenizer_fr_en = MarianTokenizer.from_pretrained(mname_fr_en)
-model_fr_en = AutoModelForSeq2SeqLM.from_pretrained(mname_fr_en)
-
-tokenizer_ja_en = MarianTokenizer.from_pretrained(mname_ja_en)
-model_ja_en = AutoModelForSeq2SeqLM.from_pretrained(mname_ja_en)
 
 global current_hashtag
 current_hashtag = {datetime.datetime.today().weekday(): []}
@@ -168,32 +247,6 @@ def reset_daily_hashtag(current_hashtag):
     if datetime.datetime.today().weekday() != list(current_hashtag.keys())[0]:
 
         current_hashtag = {datetime.datetime.today().weekday(): []}
-
-def translate(text, lang):
-
-    if lang == 'fr':
-
-        tokenizer = tokenizer_fr_en
-        model = model_fr_en
-    
-    elif lang == 'ja':
-
-        tokenizer = tokenizer_ja_en
-        model = model_ja_en
-    
-    elif lang == 'en':
-
-        return text
-    
-    else:
-
-        return
-
-    input_ids = tokenizer.encode(text, return_tensors="pt")
-    outputs = model.generate(input_ids)
-    decoded = tokenizer.decode(outputs[0], skip_special_tokens=True)
-
-    return decoded
 
 emoji_pattern = re.compile("["
         u"\U0001F600-\U0001F64F"  # emoticons
@@ -216,27 +269,7 @@ emoji_pattern = re.compile("["
         u"\u3030"
                       "]+", re.UNICODE)
 
-sum_tokenizer = AutoTokenizer.from_pretrained("facebook/bart-large-cnn")
-sum_model = AutoModelForSeq2SeqLM.from_pretrained("facebook/bart-large-cnn")
-
-def summarize(text):
-
-    inputs = sum_tokenizer([text], max_length=1024, return_tensors='pt', truncation=True)
-    # Generate Summary
-    summary_ids = sum_model.generate(inputs['input_ids'], max_length=100)
-    return [sum_tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in summary_ids][0]
-
-sentiment_model = pipeline(model="finiteautomata/bertweet-base-sentiment-analysis")
-
 tzwhere_ = tzwhere.tzwhere()
-
-def text_preprocessing(text: str):
-
-    text_punctuation = "".join([i for i in text if i not in string.punctuation]) # remove punctuation
-    text_lower = text_punctuation.lower() # lower
-    text_tokenized = text_lower.split(" ") # tokenization
-
-    return text_tokenized
 
 def full_text_tweet(tweet):
 
@@ -299,6 +332,16 @@ def get_tweets(trend): #80s
 
     return [(t.tweet, t.lang) for t in tweets_as_objects][-25:] 
 
+def must_fill(db, q, hashtag):
+
+    if db.session.query(q.exists()).scalar():
+
+        content = db.session.query(Content).filter(Content.hashtag.like(hashtag)).order_by(Content.id.desc()).first()
+
+        return content.date[:11] < (datetime.date.today() - datetime.timedelta(days=5)).strftime('%Y-%m-%d')
+
+    return True
+
 def harvest(db):
 
     print('Harvesting...')
@@ -309,15 +352,19 @@ def harvest(db):
 
     for country in countries:
 
+        print(country)
+
         for city, coordinate in coordinates[country].items():
+
+            print(city)
             
             lat = coordinate['lat']
             lon = coordinate['lon']
             available_loc = api.closest_trends(lat, lon)
             trends = api.get_place_trends(available_loc[0]['woeid'])
-            print(city, trends[0]['trends'])
+
             for trend in trends[0]['trends']:  
-                print(trend, current_hashtag)
+
                 hashtag = trend['name']
                 url = trend['url']
 
@@ -325,7 +372,7 @@ def harvest(db):
 
                     current_hashtag[list(current_hashtag.keys())[0]].append(hashtag)
                     text_lang = get_tweets(hashtag)
-                    print('yo')
+
                     if len(text_lang) != 0:
 
                         doc = ''  
@@ -334,38 +381,13 @@ def harvest(db):
                             tx = emoji_pattern.sub(r'', t[0])
                             tx_translated = translate(tx, t[1])
                             doc += tx_translated if tx_translated is not None else ''
-                        
-                        raw_preprocessing = text_preprocessing(doc)
+
                         q = db.session.query(Content.id).filter(Content.hashtag==hashtag)
 
-                        if db.session.query(q.exists()).scalar():
+                        if must_fill(db, q, hashtag):
 
-                            content: Content = db.session.query(Content).filter(Content.hashtag==hashtag).order_by(Content.id.desc()).first()
-                            
-                            summary_preprocessed = set(content.summary_preprocessed.split(" "))
-                            tweet_preprocessed_set = set(raw_preprocessing)
-
-                            if len(summary_preprocessed.intersection(tweet_preprocessed_set)) < 10:
-
-                                summary = summarize(doc)
-                                sentiment = sentiment_model(summary)[0]['label']
-
-                                timezone_str = tzwhere_.tzNameAt(lat, lon)
-
-                                if timezone_str is None:
-                                    timezone_str = 'UTC'
-                                    city = 'London'
-
-                                tz = pytz.timezone(timezone_str)
-
-                                date = f" {datetime.datetime.now(tz).strftime('%H:%M:%S, %Y/%m/%d')} in ({city})"
-                                db.session.add(Content(hashtag, summary, " ".join(raw_preprocessing), date, sentiment, country, url))
-                                db.session.commit()
-                        
-                        else:
-
-                            summary = summarize(doc)
-                            sentiment = sentiment_model(summary)[0]['label']
+                            summary = summaryze(doc)
+                            sentiment = analyze_sentiment(summary)
 
                             timezone_str = tzwhere_.tzNameAt(lat, lon)
 
@@ -375,8 +397,8 @@ def harvest(db):
 
                             tz = pytz.timezone(timezone_str)
 
-                            date = f" {datetime.datetime.now(tz).strftime('%H:%M:%S, %Y/%m/%d')} in ({city})"
-                            db.session.add(Content(hashtag, summary, " ".join(raw_preprocessing), date, sentiment, country, url))
+                            date = f" {datetime.datetime.now(tz).strftime('%H:%M:%S, %Y/%m/%d')} from {city}"
+                            db.session.add(Content(hashtag, summary, date, sentiment, country, url))
                             db.session.commit()
 
     print('Harvesting done.')

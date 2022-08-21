@@ -268,7 +268,7 @@ body{
   padding: 1%;
   font-size: 30px;
   margin-top: 90px;
-  margin-left: 38.5%;
+  margin-left: 36.5%;
   text-align: center;  
   color: #072326;
   background-color: #FFF;
@@ -431,7 +431,7 @@ body{
     box-shadow: 0px 10px 10px -10px var(--grayishBlue);
     padding: 30px;
     margin: 40px;  
-    width: 630px;
+    width: 580px;
 }
 
 @media (max-width: 450px) {
