@@ -10,6 +10,7 @@ WORKDIR /News
 # Copy the dependencies file to the working directory
 COPY requirements.txt config.py app.db app.py .
 COPY Newsapp Newsapp
+COPY Newsapp/static/js/jquery.js Newsapp/static/js
 
 # Install any dependencies
 RUN python -m pip install --upgrade pip
